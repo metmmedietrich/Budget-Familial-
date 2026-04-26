@@ -881,7 +881,7 @@ function pinKey(k){
   if(pinSaisi.length === 4){
     setTimeout(()=>{
       if(pinSaisi === PIN_CORRECT){
-        sessionStorage.setItem('pin_ok','1');
+        sessionStorage.setItem('pin_ok', PIN_CORRECT);
         document.getElementById('pin-screen').style.display='none';
         appInit();
       } else {
@@ -964,8 +964,8 @@ function appInit(){
   recalc();
 }
 
-// Démarrage : si déjà authentifié dans la session, on passe le PIN
-if(sessionStorage.getItem('pin_ok')==='1'){
+// Démarrage : si déjà authentifié dans la session avec le bon code, on passe le PIN
+if(sessionStorage.getItem('pin_ok') === PIN_CORRECT){
   document.getElementById('pin-screen').style.display='none';
   appInit();
 }
