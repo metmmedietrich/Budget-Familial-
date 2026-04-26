@@ -21,6 +21,42 @@
   --shadow:0 2px 20px rgba(28,21,16,.06);
   --nav-h:64px;
 }
+
+/* ── PIN SCREEN ── */
+#pin-screen{
+  position:fixed;inset:0;z-index:9999;
+  background:var(--head-bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:2rem;
+}
+#pin-screen h2{
+  font-family:'Fraunces',serif;font-size:2rem;font-weight:600;
+  color:#fff;letter-spacing:-.02em;margin-bottom:.4rem;
+}
+#pin-screen p{font-size:13px;color:rgba(255,255,255,.65);margin-bottom:2rem;text-align:center;}
+.pin-dots{display:flex;gap:12px;margin-bottom:2rem;}
+.pin-dot{
+  width:16px;height:16px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.5);
+  background:transparent;transition:background .15s;
+}
+.pin-dot.filled{background:#fff;border-color:#fff;}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:260px;}
+.pin-key{
+  background:rgba(255,255,255,.15);border:none;border-radius:14px;
+  color:#fff;font-family:'Fraunces',serif;font-size:1.5rem;font-weight:600;
+  padding:1.1rem;cursor:pointer;transition:background .1s;
+  -webkit-tap-highlight-color:transparent;
+}
+.pin-key:active{background:rgba(255,255,255,.35);}
+.pin-key.del{font-family:'Plus Jakarta Sans',sans-serif;font-size:1rem;}
+.pin-error{
+  font-size:13px;color:rgba(255,255,255,.9);
+  background:rgba(0,0,0,.2);border-radius:8px;
+  padding:.5rem 1rem;margin-top:1rem;
+  opacity:0;transition:opacity .2s;
+}
+.pin-error.show{opacity:1;}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{
@@ -273,6 +309,33 @@ footer{text-align:center;padding:1.5rem 1rem;font-size:11px;color:var(--text3);f
 </style>
 </head>
 <body>
+
+<!-- ── ÉCRAN PIN ── -->
+<div id="pin-screen">
+  <h2>Budget <span style="font-style:italic;opacity:.85">familial</span></h2>
+  <p>Entrez votre code à 4 chiffres</p>
+  <div class="pin-dots">
+    <div class="pin-dot" id="pd0"></div>
+    <div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div>
+    <div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2</button>
+    <button class="pin-key" onclick="pinKey('3')">3</button>
+    <button class="pin-key" onclick="pinKey('4')">4</button>
+    <button class="pin-key" onclick="pinKey('5')">5</button>
+    <button class="pin-key" onclick="pinKey('6')">6</button>
+    <button class="pin-key" onclick="pinKey('7')">7</button>
+    <button class="pin-key" onclick="pinKey('8')">8</button>
+    <button class="pin-key" onclick="pinKey('9')">9</button>
+    <button class="pin-key" style="visibility:hidden"></button>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-error" id="pin-error">Code incorrect, réessayez</div>
+</div>
 
 <header>
   <div class="hdr-top">
@@ -807,14 +870,105 @@ function showView(id,btn){
   window.scrollTo(0,0);
 }
 
-buildSection(CHARGES_LOGEMENT,'charges-logement');
-buildSection(CHARGES_ENERGIE,'charges-energie');
-buildSection(CHARGES_VEHICULES,'charges-vehicules');
-buildSection(CHARGES_MUTUELLES,'charges-mutuelles');
-buildSection(CHARGES_TAXES,'charges-taxes');
-buildSection(CHARGES_ABOS,'charges-abos');
-initVirementMois();
-recalc();
+// ── PIN ──────────────────────────────────────────────
+const PIN_CORRECT = '1234'; // ← changez ce code ici
+let pinSaisi = '';
+
+function pinKey(k){
+  if(pinSaisi.length >= 4) return;
+  pinSaisi += k;
+  document.getElementById('pd'+(pinSaisi.length-1)).classList.add('filled');
+  if(pinSaisi.length === 4){
+    setTimeout(()=>{
+      if(pinSaisi === PIN_CORRECT){
+        sessionStorage.setItem('pin_ok','1');
+        document.getElementById('pin-screen').style.display='none';
+        appInit();
+      } else {
+        const err=document.getElementById('pin-error');
+        err.classList.add('show');
+        setTimeout(()=>{
+          pinSaisi='';
+          for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('filled');
+          err.classList.remove('show');
+        },1200);
+      }
+    },100);
+  }
+}
+function pinDel(){
+  if(pinSaisi.length===0) return;
+  pinSaisi=pinSaisi.slice(0,-1);
+  document.getElementById('pd'+pinSaisi.length).classList.remove('filled');
+}
+
+// ── LOCALSTORAGE ─────────────────────────────────────
+const LS_KEY = 'budget_dietrich_v1';
+
+function sauvegarder(){
+  const data={};
+  // salaires
+  data.vous = document.getElementById('inp-vous').value;
+  data.elle = document.getElementById('inp-elle').value;
+  // comptes joints
+  data.imprevus = document.getElementById('inp-imprevus').value;
+  data.epargne  = document.getElementById('inp-epargne').value;
+  // charges
+  const ALL=[...CHARGES_LOGEMENT,...CHARGES_ENERGIE,...CHARGES_VEHICULES,...CHARGES_MUTUELLES,...CHARGES_TAXES,...CHARGES_ABOS];
+  data.charges={};
+  ALL.forEach(c=>{
+    const el=document.getElementById('c-'+c.id);
+    if(el) data.charges[c.id]=el.value;
+  });
+  localStorage.setItem(LS_KEY, JSON.stringify(data));
+}
+
+function chargerSauvegarde(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const data=JSON.parse(raw);
+    if(data.vous) document.getElementById('inp-vous').value=data.vous;
+    if(data.elle) document.getElementById('inp-elle').value=data.elle;
+    if(data.imprevus) document.getElementById('inp-imprevus').value=data.imprevus;
+    if(data.epargne){
+      document.getElementById('inp-epargne').value=data.epargne;
+      document.getElementById('inp-epargne2').value=data.epargne;
+    }
+    if(data.charges){
+      Object.entries(data.charges).forEach(([id,val])=>{
+        const el=document.getElementById('c-'+id);
+        if(el) el.value=val;
+      });
+    }
+  } catch(e){ console.warn('Erreur chargement:', e); }
+}
+
+// Patch : sauvegarde automatique à chaque recalc
+const _recalcOrig = recalc;
+recalc = function(){
+  _recalcOrig();
+  sauvegarder();
+};
+
+// ── INIT ─────────────────────────────────────────────
+function appInit(){
+  buildSection(CHARGES_LOGEMENT,'charges-logement');
+  buildSection(CHARGES_ENERGIE,'charges-energie');
+  buildSection(CHARGES_VEHICULES,'charges-vehicules');
+  buildSection(CHARGES_MUTUELLES,'charges-mutuelles');
+  buildSection(CHARGES_TAXES,'charges-taxes');
+  buildSection(CHARGES_ABOS,'charges-abos');
+  chargerSauvegarde();
+  initVirementMois();
+  recalc();
+}
+
+// Démarrage : si déjà authentifié dans la session, on passe le PIN
+if(sessionStorage.getItem('pin_ok')==='1'){
+  document.getElementById('pin-screen').style.display='none';
+  appInit();
+}
 </script>
 </body>
 </html>
