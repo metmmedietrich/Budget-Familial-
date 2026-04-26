@@ -534,6 +534,10 @@ footer{text-align:center;padding:1.5rem 1rem;font-size:11px;color:var(--text3);f
     <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:600;letter-spacing:-.01em;position:relative;z-index:1">Jour de salaire</div>
     <div class="vir-pills">
       <div class="vir-pill">
+        <label>Année</label>
+        <select id="sel-annee" onchange="updateMoisVirement()" style="background:transparent;border:none;color:inherit;font-family:inherit;font-size:14px;font-weight:600;outline:none;cursor:pointer;-webkit-appearance:none;"></select>
+      </div>
+      <div class="vir-pill">
         <label>Mois</label>
         <select id="sel-mois" onchange="updateMoisVirement()" style="background:transparent;border:none;color:inherit;font-family:inherit;font-size:14px;font-weight:600;outline:none;cursor:pointer;-webkit-appearance:none;">
           <option value="0">Janvier</option><option value="1">Février</option><option value="2">Mars</option>
@@ -775,6 +779,50 @@ function toggleCheck(cb){
   if(!label)return;
   if(cb.checked){row.style.background='var(--green-l)';label.style.textDecoration='line-through';label.style.color='var(--text3)';}
   else{row.style.background='';label.style.textDecoration='';label.style.color='';}
+  // Sauvegarder l'état des cases
+  sauvegarderChecks();
+}
+
+function collecterChecks(){
+  const mois = new Date().getMonth()+'-'+new Date().getFullYear();
+  const checks = { mois };
+  ['v-lignes-vous','v-lignes-elle'].forEach(cid => {
+    checks[cid] = [];
+    const boxes = document.querySelectorAll(`#${cid} input[type=checkbox]`);
+    boxes.forEach(cb => checks[cid].push(cb.checked));
+  });
+  return checks;
+}
+
+function appliquerChecks(checks){
+  if(!checks) return;
+  // Remise à zéro si c'est un autre mois
+  const moisActuel = new Date().getMonth()+'-'+new Date().getFullYear();
+  if(checks.mois !== moisActuel) return;
+  ['v-lignes-vous','v-lignes-elle'].forEach(cid => {
+    if(!checks[cid]) return;
+    const boxes = document.querySelectorAll(`#${cid} input[type=checkbox]`);
+    boxes.forEach((cb, i) => {
+      if(checks[cid][i]){
+        cb.checked = true;
+        toggleCheck(cb);
+      }
+    });
+  });
+}
+
+let checkTimer = null;
+function sauvegarderChecks(){
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(async ()=>{
+    try{
+      _ignorerProchainSnapshot = true;
+      const data = collecterDonnees();
+      data.checks = collecterChecks();
+      await setDoc(DOC_REF, data);
+      afficherStatutSync('✓ Synchronisé');
+    } catch(e){ console.warn('Erreur sauvegarde checks:', e); }
+  }, 400);
 }
 
 function updateVirement(vous,elle,charges,imprevus,epargne){
@@ -819,6 +867,7 @@ function updateVirement(vous,elle,charges,imprevus,epargne){
 
 function ouvrirGmail(){
   const moisIdx=parseInt(document.getElementById('sel-mois').value);
+  const an=parseInt(document.getElementById('sel-annee').value);
   const date=document.getElementById('inp-date-virement').value;
   const moisLabel=MOIS_FR[moisIdx];
   const vous=getVal('inp-vous'),elle=getVal('inp-elle');
@@ -832,8 +881,8 @@ function ouvrirGmail(){
   ];
   const totalVire=comptes.reduce((s,c)=>s+c.montant,0);
   const lignes=comptes.map(c=>`  • ${c.label} (${c.bank}) : ${c.montant.toLocaleString('fr-FR',{minimumFractionDigits:2})} €`).join('\n');
-  const corps=`Bonjour,\n\nVoici le récapitulatif des virements à effectuer ce ${date} ${moisLabel} 2026.\n\n━━━━━━━━━━━━━━━━━━━━━━\nVIREMENTS À FAIRE (chacun)\n━━━━━━━━━━━━━━━━━━━━━━\n${lignes}\n\nTotal à virer : ${totalVire.toLocaleString('fr-FR',{minimumFractionDigits:2})} €\n\n━━━━━━━━━━━━━━━━━━━━━━\nRESTES SUR COMPTES PERSO\n━━━━━━━━━━━━━━━━━━━━━━\n  • Florent  (${vous} €) → reste ${(vous-totalVire).toLocaleString('fr-FR',{minimumFractionDigits:2})} €\n  • Mathilda (${elle} €) → reste ${(elle-totalVire).toLocaleString('fr-FR',{minimumFractionDigits:2})} €\n\nBon mois !\n— Budget Familial`;
-  const url=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent('florentdietrich@gmail.com,mathildadietrich@gmail.com')}&su=${encodeURIComponent('Virements du mois — '+moisLabel+' 2026')}&body=${encodeURIComponent(corps)}`;
+  const corps=`Bonjour,\n\nVoici le récapitulatif des virements à effectuer ce ${date} ${moisLabel} ${an}.\n\n━━━━━━━━━━━━━━━━━━━━━━\nVIREMENTS À FAIRE (chacun)\n━━━━━━━━━━━━━━━━━━━━━━\n${lignes}\n\nTotal à virer : ${totalVire.toLocaleString('fr-FR',{minimumFractionDigits:2})} €\n\n━━━━━━━━━━━━━━━━━━━━━━\nRESTES SUR COMPTES PERSO\n━━━━━━━━━━━━━━━━━━━━━━\n  • Florent  (${vous} €) → reste ${(vous-totalVire).toLocaleString('fr-FR',{minimumFractionDigits:2})} €\n  • Mathilda (${elle} €) → reste ${(elle-totalVire).toLocaleString('fr-FR',{minimumFractionDigits:2})} €\n\nBon mois !\n— Budget Familial`;
+  const url=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent('florentdietrich@gmail.com,mathildadietrich@gmail.com')}&su=${encodeURIComponent('Virements du mois — '+moisLabel+' '+an)}&body=${encodeURIComponent(corps)}`;
   window.open(url,'_blank');
 }
 
@@ -849,17 +898,33 @@ function updateEpargneTab(epargne){
   if(el2&&el2!==document.activeElement)el2.value=epargne;
 }
 
-const CALENDRIER_PAYES_2026=[28,25,27,28,27,26,29,27,28,28,26,22];
+const CALENDRIERS_PAYES = {
+  2026: [28,25,27,28,27,26,29,27,28,28,26,22],
+  2027: [27,24,29,28,27,28,28,27,27,27,25,22],
+};
 const MOIS_FR=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
 function updateMoisVirement(){
-  const idx=parseInt(document.getElementById('sel-mois').value);
-  document.getElementById('inp-date-virement').value=CALENDRIER_PAYES_2026[idx];
-  document.getElementById('virement-mois-label').textContent=MOIS_FR[idx]+' 2026';
+  const idx = parseInt(document.getElementById('sel-mois').value);
+  const an  = parseInt(document.getElementById('sel-annee').value);
+  const cal = CALENDRIERS_PAYES[an] || CALENDRIERS_PAYES[2026];
+  document.getElementById('inp-date-virement').value = cal[idx];
+  document.getElementById('virement-mois-label').textContent = MOIS_FR[idx]+' '+an;
 }
 function initVirementMois(){
-  const sel=document.getElementById('sel-mois');
-  sel.value=new Date().getMonth();
+  const now = new Date();
+  const an  = now.getFullYear();
+  const sel = document.getElementById('sel-mois');
+  const selAn = document.getElementById('sel-annee');
+  sel.value = now.getMonth();
+  // Ajouter les années disponibles dynamiquement
+  selAn.innerHTML = '';
+  Object.keys(CALENDRIERS_PAYES).forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if(parseInt(y) === an) opt.selected = true;
+    selAn.appendChild(opt);
+  });
   updateMoisVirement();
 }
 
@@ -928,7 +993,8 @@ function collecterDonnees(){
     elle: document.getElementById('inp-elle').value,
     imprevus: document.getElementById('inp-imprevus').value,
     epargne: document.getElementById('inp-epargne').value,
-    charges: {}
+    charges: {},
+    checks: collecterChecks()
   };
   ALL_CHARGES.forEach(c => {
     const el = document.getElementById('c-'+c.id);
@@ -952,6 +1018,8 @@ function appliquerDonnees(data){
       if(el) el.value = val;
     });
   }
+  // Restaurer les cases après un court délai pour laisser buildLignes finir
+  if(data.checks) setTimeout(()=>appliquerChecks(data.checks), 200);
 }
 
 let saveTimer = null;
