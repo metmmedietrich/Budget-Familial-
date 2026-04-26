@@ -968,6 +968,16 @@ function pinDel(){
   document.getElementById('pd'+pinSaisi.length).classList.remove('filled');
 }
 
+// ── EXPOSITION GLOBALE (requis avec type="module") ───
+window.pinKey      = pinKey;
+window.pinDel      = pinDel;
+window.toggleCheck = toggleCheck;
+window.showView    = showView;
+window.recalc      = recalc;
+window.syncEpargne = syncEpargne;
+window.updateMoisVirement = updateMoisVirement;
+window.ouvrirGmail = ouvrirGmail;
+
 // ── FIREBASE FIRESTORE ───────────────────────────────
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
