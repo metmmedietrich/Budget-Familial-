@@ -343,6 +343,7 @@ footer{text-align:center;padding:1.5rem 1rem;font-size:11px;color:var(--text3);f
       <h1>Budget <span>familial</span></h1>
       <div class="hdr-sub">Année scolaire 2025–2026</div>
     </div>
+    <div id="sync-status" style="font-size:11px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.2);border-radius:20px;padding:4px 10px;font-weight:600;opacity:0;transition:opacity .4s;align-self:flex-start;margin-top:4px;white-space:nowrap"></div>
   </div>
   <div class="hdr-fields">
     <div class="hdr-field">
@@ -643,7 +644,7 @@ footer{text-align:center;padding:1.5rem 1rem;font-size:11px;color:var(--text3);f
   </button>
 </nav>
 
-<script>
+<script type="module">
 const CHARGES_LOGEMENT=[
   {id:'credit_maison',label:'Crédit immobilier',sub:'',val:955.37},
   {id:'ass_pret_hab',label:'Assurance prêt habitation',sub:'',val:46.22},
@@ -902,54 +903,95 @@ function pinDel(){
   document.getElementById('pd'+pinSaisi.length).classList.remove('filled');
 }
 
-// ── LOCALSTORAGE ─────────────────────────────────────
-const LS_KEY = 'budget_dietrich_v1';
+// ── FIREBASE FIRESTORE ───────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
-function sauvegarder(){
-  const data={};
-  // salaires
-  data.vous = document.getElementById('inp-vous').value;
-  data.elle = document.getElementById('inp-elle').value;
-  // comptes joints
-  data.imprevus = document.getElementById('inp-imprevus').value;
-  data.epargne  = document.getElementById('inp-epargne').value;
-  // charges
-  const ALL=[...CHARGES_LOGEMENT,...CHARGES_ENERGIE,...CHARGES_VEHICULES,...CHARGES_MUTUELLES,...CHARGES_TAXES,...CHARGES_ABOS];
-  data.charges={};
-  ALL.forEach(c=>{
-    const el=document.getElementById('c-'+c.id);
-    if(el) data.charges[c.id]=el.value;
-  });
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
-}
-
-function chargerSauvegarde(){
-  try{
-    const raw=localStorage.getItem(LS_KEY);
-    if(!raw) return;
-    const data=JSON.parse(raw);
-    if(data.vous) document.getElementById('inp-vous').value=data.vous;
-    if(data.elle) document.getElementById('inp-elle').value=data.elle;
-    if(data.imprevus) document.getElementById('inp-imprevus').value=data.imprevus;
-    if(data.epargne){
-      document.getElementById('inp-epargne').value=data.epargne;
-      document.getElementById('inp-epargne2').value=data.epargne;
-    }
-    if(data.charges){
-      Object.entries(data.charges).forEach(([id,val])=>{
-        const el=document.getElementById('c-'+id);
-        if(el) el.value=val;
-      });
-    }
-  } catch(e){ console.warn('Erreur chargement:', e); }
-}
-
-// Patch : sauvegarde automatique à chaque recalc
-const _recalcOrig = recalc;
-recalc = function(){
-  _recalcOrig();
-  sauvegarder();
+const firebaseConfig = {
+  apiKey: "AIzaSyDgkjT1dK-xGfJlYfXqdmpVOD_sGNQ52KM",
+  authDomain: "budget-familial-43e61.firebaseapp.com",
+  projectId: "budget-familial-43e61",
+  storageBucket: "budget-familial-43e61.firebasestorage.app",
+  messagingSenderId: "502952854133",
+  appId: "1:502952854133:web:803ea40b6a69f5da986e3c"
 };
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+const DOC_REF = doc(db, 'budget', 'dietrich');
+
+let _ignorerProchainSnapshot = false;
+
+function collecterDonnees(){
+  const data = {
+    vous: document.getElementById('inp-vous').value,
+    elle: document.getElementById('inp-elle').value,
+    imprevus: document.getElementById('inp-imprevus').value,
+    epargne: document.getElementById('inp-epargne').value,
+    charges: {}
+  };
+  ALL_CHARGES.forEach(c => {
+    const el = document.getElementById('c-'+c.id);
+    if(el) data.charges[c.id] = el.value;
+  });
+  return data;
+}
+
+function appliquerDonnees(data){
+  if(!data) return;
+  if(data.vous) document.getElementById('inp-vous').value = data.vous;
+  if(data.elle) document.getElementById('inp-elle').value = data.elle;
+  if(data.imprevus) document.getElementById('inp-imprevus').value = data.imprevus;
+  if(data.epargne){
+    document.getElementById('inp-epargne').value = data.epargne;
+    document.getElementById('inp-epargne2').value = data.epargne;
+  }
+  if(data.charges){
+    Object.entries(data.charges).forEach(([id,val])=>{
+      const el = document.getElementById('c-'+id);
+      if(el) el.value = val;
+    });
+  }
+}
+
+let saveTimer = null;
+function sauvegarder(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try{
+      _ignorerProchainSnapshot = true;
+      await setDoc(DOC_REF, collecterDonnees());
+      afficherStatutSync('✓ Synchronisé');
+    } catch(e){
+      afficherStatutSync('⚠ Hors ligne');
+      console.warn('Erreur sauvegarde Firebase:', e);
+    }
+  }, 800);
+}
+
+function afficherStatutSync(msg){
+  let el = document.getElementById('sync-status');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.opacity='0'; }, 3000);
+}
+
+function demarrerSync(){
+  onSnapshot(DOC_REF, snap => {
+    if(_ignorerProchainSnapshot){ _ignorerProchainSnapshot=false; return; }
+    if(snap.exists()){
+      appliquerDonnees(snap.data());
+      recalcSansSync();
+    }
+  }, err => console.warn('Erreur sync:', err));
+}
+
+// Patch recalc : version avec sauvegarde et version sans (pour éviter boucle infinie)
+const _recalcOrig = recalc;
+function recalcSansSync(){ _recalcOrig(); }
+recalc = function(){ _recalcOrig(); sauvegarder(); };
 
 // ── INIT ─────────────────────────────────────────────
 function appInit(){
@@ -959,9 +1001,14 @@ function appInit(){
   buildSection(CHARGES_MUTUELLES,'charges-mutuelles');
   buildSection(CHARGES_TAXES,'charges-taxes');
   buildSection(CHARGES_ABOS,'charges-abos');
-  chargerSauvegarde();
   initVirementMois();
-  recalc();
+  // Charger depuis Firebase puis écouter les changements en temps réel
+  onSnapshot(DOC_REF, snap => {
+    if(snap.exists()) appliquerDonnees(snap.data());
+    recalcSansSync();
+    // Après le premier chargement, passer en mode sync live
+    demarrerSync();
+  }, { once: true });
 }
 
 // Démarrage : si déjà authentifié dans la session avec le bon code, on passe le PIN
